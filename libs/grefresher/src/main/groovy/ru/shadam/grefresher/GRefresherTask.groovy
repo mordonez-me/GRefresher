@@ -3,6 +3,7 @@ import org.gradle.api.DefaultTask
 import org.gradle.api.Project
 import org.gradle.api.tasks.TaskAction
 import org.gradle.tooling.GradleConnector
+import org.gradle.process.internal.DefaultExecAction
 /**
  * @author sala
  */
@@ -34,22 +35,25 @@ class GRefresherTask extends DefaultTask {
           if (input >= 0) {
             char c = (char) input
             if (c == 'q' || c == 'Q') {
+              System.out.println "Killing process..."
               process.destroy()
               runningThread.join()
               break infinite
-            } else {
-              restartApplication(config)
-              System.out.println hint
-              // Dumping input
-              while (System.in.available() > 0) {
-                long available = System.in.available()
-                for (int i = 0; i < available; i++) {
-                  if (System.in.read() == -1) {
-                    break
-                  }
-                }
-              }
             }
+            // } else {
+            //   System.out.println "Restarting application..."
+            //   restartApplication(config)
+            //   System.out.println hint
+            //   // Dumping input
+            //   while (System.in.available() > 0) {
+            //     long available = System.in.available()
+            //     for (int i = 0; i < available; i++) {
+            //       if (System.in.read() == -1) {
+            //         break
+            //       }
+            //     }
+            //   }
+            // }
           }
         }
         Thread.sleep(500)
@@ -60,6 +64,7 @@ class GRefresherTask extends DefaultTask {
   }
 
   synchronized def restartApplication(GRefresherConfig config) {
+    System.out.println "Restarting application..."
     process.destroy()
     runningThread.join()
     // calling rebuild
@@ -107,13 +112,20 @@ class GRefresherTask extends DefaultTask {
       def classPath = getRunnerClassPath()
       classPath = classPath.collect { it.absolutePath }.join(System.getProperty('path.separator'))
       //
+
       def procParams = [javaPath] + debugArg + config.jvmArgs + config.systemProperties.collect { k, v -> "-D$k=$v" } + ['-cp', classPath, config.mainClassName]
       process = ProcessBuilder.newInstance()
+              .inheritIO()
               .command(procParams as List<String>)
-              .redirectOutput(ProcessBuilder.Redirect.INHERIT)
-              .redirectError(ProcessBuilder.Redirect.INHERIT)
+              // .redirectErrorStream(true)
+              .redirectOutput(ProcessBuilder.Redirect.PIPE)
+              .redirectError(ProcessBuilder.Redirect.PIPE)
+              // .redirectErrorStream(true)
               .start()
-      process.waitFor()
+
+      System.out.println "Process started..."
+      process.waitForProcessOutput( System.out, System.err )
+
       logger.debug 'Process stopped'
     }
   }
